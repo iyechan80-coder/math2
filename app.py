@@ -15,43 +15,51 @@ Kd = st.sidebar.slider("D: 미분 이득 (오차 변화율)", 0.0, 2.0, 0.0, ste
 noise_level = st.sidebar.slider("외부 센서 노이즈", 0.0, 5.0, 0.0, step=0.5)
 
 # 3. 물리 환경 및 초기값 세팅
-target_altitude = 100.0  # 드론의 목표 고도
-time_steps = 200         # 시뮬레이션 반복 횟수
-dt = 0.1                 # 시간 간격 (1루프당 시간)
+target_altitude = 100.0  
+time_steps = 200         
+dt = 0.1                 
 
-current_altitude = 0.0   # 드론의 현재 고도 (바닥에서 시작)
-integral_error = 0.0     # 오차의 적분(누적) 변수
+current_altitude = 0.0   
+integral_error = 0.0     
 previous_error = target_altitude - current_altitude
 
 times = []
 actual_altitudes = []
 target_altitudes = []
 
-# 4. PID 제어 핵심 알고리즘 루프 (미적분 구현부)
+# 4. PID 제어 핵심 알고리즘 루프
 for t in range(time_steps):
-    # ① 오차 계산
     error = target_altitude - current_altitude
     
-    # ② 적분 (구분구적법: 직사각형 넓이의 누적)
+    # 적분 (누적 오차)
     integral_error += error * dt
     
-    # ③ 미분 (순간 변화율: 오차의 기울기)
+    # [추가된 필살기 2] 적분 누적 제한 (Anti-windup) - 물리적 한계 반영
+    if integral_error > 500: integral_error = 500
+    elif integral_error < -500: integral_error = -500
+    
+    # 미분 (오차의 순간 변화율)
     derivative_error = (error - previous_error) / dt
     
-    # ④ PID 최종 제어값 산출
+    # PID 최종 제어값 산출
     control_output = (Kp * error) + (Ki * integral_error) + (Kd * derivative_error)
     
-    # ⑤ 드론의 실제 움직임 업데이트 (출력값 + 노이즈 반영)
+    # 드론의 실제 움직임 업데이트
     current_altitude += control_output * dt
-    current_altitude += np.random.normal(0, noise_level) # 불규칙한 바람(노이즈)
+    current_altitude += np.random.normal(0, noise_level)
     
-    # ⑥ 그래프 그리기 위해 데이터 저장
+    # 데이터 저장
     times.append(t * dt)
     actual_altitudes.append(current_altitude)
     target_altitudes.append(target_altitude)
-    
-    # 다음 시간을 위해 오차 업데이트
     previous_error = error
+
+# [추가된 필살기 1] 상단에 결과 데이터 요약해서 보여주기 (대시보드화)
+col1, col2, col3 = st.columns(3)
+col1.metric("최종 드론 고도", f"{current_altitude:.1f} m")
+col2.metric("최종 오차", f"{abs(error):.1f} m")
+col3.metric("최대 솟구침 (최고 고도)", f"{max(actual_altitudes):.1f} m")
+st.divider() # 가로줄 그어주기
 
 # 5. 그래프 시각화
 fig, ax = plt.subplots(figsize=(10, 5))
